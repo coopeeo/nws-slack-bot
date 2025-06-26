@@ -2,6 +2,7 @@
 todo: this thingy lmao
 
 TODO:
+- [ ] Add an option for reciving via NWWS-CI (will be default and its faster as its a push service like websockets but requires and account)
 - [ ] seperate into different channels per area so it doesn't get clogged up all in one channel
 - [ ] add a debug channel when it gonna crash uh oh
 - [ ] Make cancelations actually work
