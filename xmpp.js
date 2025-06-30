@@ -6,8 +6,33 @@ const fs = require('fs');
 require('dotenv').config();
 
 const alertsSelections = [
-  "SVR"
-]
+  "CAP",  // Messages in Common Alerting Protocol format
+  "TOR",  // Tornado Warning
+  "SVR",  // Severe Thunderstorm Warning
+  "FLO",  // Flood Warning
+  "FFW",  // Flash Flood Warning
+  "WFO",  // Weather Forecast Office (general weather updates)
+  "SVS",  // Special Weather Statement (not immediately threatening but could impact public safety)
+  "RWT",  // Routine Weather Test (routine tests for weather systems)
+  "NCF",  // National Coastal Flood (alerts for coastal flooding)
+  "MCD",  // Mesoscale Discussion (detailed forecast discussions for weather phenomena)
+  "MSC",  // Marine Special Consideration (alerts regarding marine conditions)
+  "LAL",  // Lightning Activity Level (monitoring lightning in specific areas)
+  "LEW",  // Lake Effect Snow Warning (alerts related to lake-effect snow)
+  "MWW",  // Marine Weather Warning (general warnings related to marine weather)
+  "SPS",  // Special Weather Statement (warnings for minor conditions not severe but noteworthy)
+  "CFW",  // Coastal Flood Warning (warnings for flooding along coastlines)
+  "CFA",  // Coastal Flood Advisory (less urgent coastal flooding advisory)
+  "SFA",  // Snowfall Advisory (advisory for snow-related weather issues)
+  "SMW",  // Snow Squall Warning (issued when a snow squall is approaching)
+  "SWY",  // Snow Watch (warnings for possible snow squalls or storms)
+  "HLS",  // Hurricane Local Statement (specific information during hurricanes)
+  "HMW",  // High Wind Warning (wind conditions are a danger)
+  "HWA",  // High Wind Advisory (winds expected but not dangerous enough to issue a warning)
+  "HWW",  // High Water Warning (issued when floodwaters are imminent)
+  "HLS",  // Hazardous Weather Statement (general hazard statement)
+  "NWS"   // National Weather Service Alert (a catch-all code for alerts issued directly by NWS)
+];
 
 const xmpp = client({
   domain: 'nwws-oi.weather.gov',
@@ -46,14 +71,15 @@ xmpp.on('online', async () => {
 
 xmpp.on('stanza', async (stanza) => {
   // Handle incoming messages or other stanzas
-  if (stanza.is('message') && stanza.getChild('x') && stanza.attrs.type === 'groupchat') {
+  
+  if (stanza.is('message') && stanza.getChild('x') && stanza.attrs.type === 'groupchat' && alertsSelections.includes(stanza.getChild('x').attrs.awipsid.substring(0, 3))) {
     const from = await stanza.attrs.from;
     const body = await stanza.getChild('x').text();
 
     console.log(stanza.getChild('x').attrs);
     msg = await app.client.chat.postMessage({
       channel,
-      text: `New alert from ${from}: ${body}`,
+      text: `${stanza.getChild('x').attrs.cccc} issued ${stanza.getChild('x').attrs.awipsid.substring(0, 3)}`,
       username: 'NWS Alert Bot',
     }).catch((error) => {
       console.error('Error posting message to Slack:', error);
@@ -61,7 +87,7 @@ xmpp.on('stanza', async (stanza) => {
 
     await app.client.chat.postMessage({
       channel,
-      text: `test`,
+      text: body,
       thread_ts: msg.ts,
       username: 'NWS Alert Bot',
     }).catch((error) => {
