@@ -9,15 +9,14 @@ this is very early alpha but
 
 - this is very early alpha also the NWS_RECIVE env var doesnt do anything yet.
 
-## Web
+## web
 - has update support and does it in replies but its a hit or miss
-- will ratelimit slack alot since it does a request every 30 seconds
+- will ratelimit slack alot since it does a request every 30 seconds to nws api and there can be alot of new alerts
 
 ## xmpp
 - you get alerts via sub/pub instead of html endpoint
 - no replying support yet
-- sometimes stations push messages as CAP (its annoying) so i will make a detector soon
-- and regular messages are formatted very oddly so will have to strip it because its weird
+- detects cap messages only since those are alert ones
 - also it does all the actual info in a reply but in the little main short message imma have it maybe spell out the station name and the warning/alert name
 
 TODO:

@@ -24,6 +24,7 @@
     "@xmpp/client": "^0.13.5",
     "@xmpp/debug": "^0.13.5",
     "dotenv": "^16.5.0",
+    "fast-xml-parser": "^5.2.5",
     "node-fetch": "^3.3.2"
   }
 }
