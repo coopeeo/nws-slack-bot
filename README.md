@@ -1,3 +1,5 @@
+### This is the last commit with web support as it's buggy, spammy (specifically to slack's api), and most slow as it's based on requests and not pub/sub like xmpp is. If you want to host this bot please use the main branch as that will have the latest version of xmpp
+
 # NWS Slack Bot
 A slack bot
 
