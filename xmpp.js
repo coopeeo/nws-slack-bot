@@ -81,7 +81,7 @@ xmpp.on('stanza', async (stanza) => {
         console.error('Error posting message to Slack:', error);
       });
     }
-    console.log(alertThreadData);
+    console.log(body.alert.references);
   }
 });
 
