@@ -54,10 +54,11 @@ xmpp.on('stanza', async (stanza) => {
     let body = parser.parse(bodyXml);
     if (body.alert.info.description == "Monitoring message only. Please disregard.") return;
     
-    if (body.alert.references && body.alert.references.length > 0 && body.alert.references != null && alertThreadData[body.alert.references.split(',')[1]] != undefined && alertThreadData[body.alert.references.split(',')[1]] != null && alertThreadData[body.alert.references[0].identifier.split(',')[1]] != 'ignore') {
+    if (body.alert.references && body.alert.references.split(',').length == 0) console.log(`Alert ${body.alert.identifier} has a refrence but cant find id. Refrences: ${body.alert.references}`);
+    if (body.alert.references && body.alert.references != null && alertThreadData[body.alert.references.split(',')[1]] != undefined && alertThreadData[body.alert.references.split(',')[1]] != null && alertThreadData[body.alert.references.split(',')[1]] != 'ignore') {
       await app.client.chat.postMessage({
         channel,
-        text: `ALERT UPDATE: ${body.alert.info.headline}`,
+        text: `ALERT UPDATE: ${body.alert.info.headline}\n\nDESCRIPTION: ${body.alert.info.description}\n\nINSTRUCTION: ${body.alert.info.instruction}`,
         username: 'NWS Alert Bot',
         thread_ts: alertThreadData[body.alert.references.split(',')[1]],
       });
@@ -72,6 +73,14 @@ xmpp.on('stanza', async (stanza) => {
         console.error('Error posting message to Slack:', error);
       });
       alertThreadData[body.alert.identifier] = msg.ts;
+      
+      if (body.alert.references && body.alert.references != null) {
+        body.alert.references.split(',').filter((ref) => (ref.startsWith('urn:oid:'))).forEach((ref) => {
+          alertThreadData[ref] = msg.ts;
+          console.log(`Added reference ${ref} to alertThreadData with ts ${msg.ts}`);
+        });
+      }
+      
       await app.client.chat.postMessage({
         channel,
         text: `DESCRIPTION: ${body.alert.info.description}\n\nINSTRUCTION: ${body.alert.info.instruction}`,
@@ -82,10 +91,31 @@ xmpp.on('stanza', async (stanza) => {
       });
     }
     console.log(body.alert.references);
+    //console.log(alertThreadData);
   }
 });
 
+
+
 const alertThreadDataFile = 'alertThreadData.json';
+
+async function saveAlertThreadData() {
+  //app.logger.info('Saving alertThreadData...');
+  await fs.writeFileSync(`data/${alertThreadDataFile}`, JSON.stringify(alertThreadData, null, 2));
+  //app.logger.info('alertThreadData saved successfully.');
+}
+
+async function cleanup() {
+  app.logger.info('Cleaning up before exit...');
+  await saveAlertThreadData();
+  app.logger.info('Cleanup completed.');
+}
+
+process.on("SIGINT", async () => {
+  app.logger.info('SIGINT received, cleaning up...');
+  await cleanup();
+  process.exit(0);
+});
 
 (async () => {
   app.logger.info('Loading alertThreadData...');
@@ -100,4 +130,8 @@ const alertThreadDataFile = 'alertThreadData.json';
 
   app.logger.info('⚡️ Bolt app is running!');
   xmpp.start();
+
+  setInterval(async () => {
+    await saveAlertThreadData();
+  }, 5000);
 })();
