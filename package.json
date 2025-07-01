@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {
-    "test": "node app.js"
+    "test": "nodemon app.js",
+    "dev": "nodemon app.js",
+    "start": "node app.js",
+    "run": "node app.js"
   },
   "repository": {
     "type": "git",
@@ -25,6 +28,6 @@
     "@xmpp/debug": "^0.13.5",
     "dotenv": "^16.5.0",
     "fast-xml-parser": "^5.2.5",
-    "node-fetch": "^3.3.2"
+    "nodemon": "^3.1.10"
   }
 }

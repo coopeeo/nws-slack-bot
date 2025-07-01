@@ -1,137 +1,147 @@
+const { client, xml } = require('@xmpp/client'); // XMPP Client
 const { App } = require('@slack/bolt');
-const fetch = require('node-fetch').default;
-const fs = require('fs');
-require('dotenv').config()
+const { XMLParser } = require("fast-xml-parser");
 
-// Initializes your app with your bot token and signing secret
+const fs = require('fs');
+
+const logger = require('./lib/logger')
+const debug = require('./lib/xmpp.debug'); // For logging XMPP traffic
+
+
+require('dotenv').config();
+
+const xmpp = client({
+  domain: 'nwws-oi.weather.gov',
+  service: 'xmpp://nwws-oi.weather.gov:5222',
+  resource: 'nwws',
+  username: process.env.XMPP_USERNAME,
+  password: process.env.XMPP_PASSWORD,
+});
+
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: true,
+  socketMode: process.env.SLACK_SOCKET_MODE, // Use Socket Mode if set to TRUE
   appToken: process.env.SLACK_APP_TOKEN,
   port: process.env.PORT || 3000,
 });
 
+let alertThreadData = {};
 const channel = process.env.SLACK_CHANNEL;
-const alertThreadDataFile = 'alertThreadData.json';
 
-let alertThreadData = {}
+debug(xmpp, false);
 
+xmpp.on('error', (err) => {
+  logger.throw('[XMPP]', err);
+});
 
+xmpp.on('status', (status) => {
+  logger.debug('[XMPP]', status);
+});
 
-async function getActiveAlerts() {
-  const response = await fetch('https://api.weather.gov/alerts/active/', {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': '(SlackWeatherBot/1.0, ' + process.env.NWS_USER_AGENT_CONTACT_EMAIL + ')' ,
-    }
+xmpp.on('online', async () => {
+  logger.info('[XMPP] client is online!');
+
+  const presence = xml('presence', { 
+    to: `nwws@conference.nwws-oi.weather.gov/${process.env.XMPP_USERNAME}`
   });
-  const data = await response.json();
-  return data['features'];
-}
+  await xmpp.send(presence);
 
-async function startAndIgnore() {
-  let data = await getActiveAlerts();
-  await data.forEach((alert) => {
-    alertThreadData[alert.properties.id] = 'ignore';
-  });
-};
+});
 
-async function mainloop() {
+xmpp.on('stanza', async (stanza) => {
+  if (stanza.is('message') && stanza.getChild('x') && stanza.attrs.type === 'groupchat' && stanza.getChild('x').attrs.awipsid.substring(0, 3) == "CAP") {
 
-  //console.log(alertThreadData);
-  let data = await getActiveAlerts();
+    const from = await stanza.attrs.from;
+    const bodyXml = "<?xml" +(await stanza.getChild('x').text().split('<?xml')[1]);
+    const parser = new XMLParser();
+    
+    let body = parser.parse(bodyXml);
+    
+    if (body.alert.info.description == "Monitoring message only. Please disregard.") return;
 
-  await data.forEach(async (alert) => {
-    if ((alertThreadData[alert.properties.id] === undefined || alertThreadData[alert.properties.id] === null) && alertThreadData[alert.properties.id] != 'ignore') {
-      // @ts-ignore
-      const isUpdate = alert['properties']['references'].length != 0;
-      if (isUpdate) {
-        if (alertThreadData[alert['properties']['references'][0]['identifier']] === undefined || alertThreadData[alert['properties']['references'][0]['identifier']] === null) {
-          alertThreadData[alert['properties']['references'][0]['identifier']] = 'ignore';
-          alertThreadData[alert.properties.id] = 'ignore';
-          app.logger.info(`Ignoring update for alert ${alert.properties.id} as the reference thread is not found.`);
-        }
-      }
-      if (isUpdate && alertThreadData[alert['properties']['references'][0]['identifier']] == 'ignore') {
-        app.logger.info(`Ignoring update for alert ${alert.properties.id} as it is marked as 'ignore'.`);
-        return;
-      }
-      console.log(`Processing alert: (UPD: ${isUpdate}) ${alert.properties.id} - ${alert.properties.headline}`);
+    if (body.alert.references && body.alert.references.split(',').length == 0) app.logger.info(`Alert ${body.alert.identifier} has a reference but cant find id. References: ${body.alert.references}`);
+
+    if (body.alert.references && body.alert.references != null && alertThreadData[body.alert.references.split(',')[1]] != undefined && alertThreadData[body.alert.references.split(',')[1]] != null && alertThreadData[body.alert.references.split(',')[1]] != 'ignore') {
+      await app.client.chat.postMessage({
+        channel,
+        text: `ALERT UPDATE: ${body.alert.info.headline}\n\nDESCRIPTION: ${body.alert.info.description}\n\nINSTRUCTION: ${body.alert.info.instruction}`,
+        username: 'NWS Alert Bot',
+        thread_ts: alertThreadData[body.alert.references.split(',')[1]],
+      });
       
-      
-      let message = `${alert.properties.description} \n\n INTRUCTION: ${alert.properties.instruction}`;
-      
-      if (alert['properties']['messageType'] === 'Cancel') {
-        message = `Update from NWS: the alert has been *canceled*.`;
-      }
-      
-      let a = await app.client.chat.postMessage({
-        token: process.env.SLACK_BOT_TOKEN,
-        channel: channel,
-        text: message,
-        thread_ts: isUpdate ? alertThreadData[alert['properties']['references'][0]['identifier']] : undefined,
+      alertThreadData[body.alert.identifier] = alertThreadData[body.alert.references.split(',')[1]];
+    
+    } else {
+      msg = await app.client.chat.postMessage({
+        channel,
+        text: `ALERT: ${body.alert.info.headline}`,
+        username: 'NWS Alert Bot',
+      }).catch((error) => {
+        logger.error('Error posting message to Slack:', error);
       });
 
-      if (!isUpdate) {
-        await app.client.chat.postMessage({
-          token: process.env.SLACK_BOT_TOKEN,
-          channel: channel,
-          text: "Start Discussion here",
-          thread_ts: a.ts,
+      alertThreadData[body.alert.identifier] = msg.ts;
+      
+      if (body.alert.references && body.alert.references != null) {
+        body.alert.references.split(',').filter((ref) => (ref.startsWith('urn:oid:'))).forEach((ref) => {
+          alertThreadData[ref] = msg.ts;
+          logger.info(`Added reference ${ref} to alertThreadData with ts ${msg.ts}`);
         });
       }
-
-      //console.log(isUpdate ? alertThreadData[alert['properties']['references'][0]['identifier']] : undefined);
-      alertThreadData[alert.properties.id] = isUpdate ? alertThreadData[alert['properties']['references'][0]['identifier']] : a.ts;
+      
+      await app.client.chat.postMessage({
+        channel,
+        text: `DESCRIPTION: ${body.alert.info.description}\n\nINSTRUCTION: ${body.alert.info.instruction}`,
+        thread_ts: msg.ts,
+        username: 'NWS Alert Bot',
+      }).catch((error) => {
+        logger.error('Error posting message to Slack:', error);
+      });
     }
-  });
-}
+    logger.debug(`[ALERT INFO]`, body.alert.info);
+  }
+});
+
+
+
+const alertThreadDataFile = 'alertThreadData.json';
 
 async function saveAlertThreadData() {
-  app.logger.info('Saving alertThreadData...');
+  logger.debug('Saving alertThreadData...');
   await fs.writeFileSync(`data/${alertThreadDataFile}`, JSON.stringify(alertThreadData, null, 2));
-  app.logger.info('alertThreadData saved successfully.');
+  logger.debug('alertThreadData saved successfully.');
 }
 
 async function cleanup() {
-  app.logger.info('Cleaning up before exit...');
+  logger.debug('Cleaning up before exit...');
+  await xmpp.stop();
+  await xmpp.removeAllListeners();
   await saveAlertThreadData();
-  app.logger.info('Cleanup completed.');
+  logger.info('Cleanup completed.');
 }
 
 process.on("SIGINT", async () => {
-  app.logger.info('SIGINT received, cleaning up...');
+  logger.debug('SIGINT received, cleaning up...');
   await cleanup();
   process.exit(0);
 });
 
 (async () => {
-  app.logger.info('Loading alertThreadData...');
+  logger.debug('Loading alertThreadData...');
   try {
     alertThreadData = await JSON.parse(fs.readFileSync(`data/${alertThreadDataFile}`, 'utf8'));
   } catch (error) {
-    app.logger.error('Failed to load alertThreadData.json, starting with empty data.');
+    logger.warn('Failed to load alertThreadData.json, starting with empty data.');
     alertThreadData = {};
   }
   // Start your app
   await app.start();
 
-  app.logger.info('⚡️ Bolt app is running!');
+  logger.info('⚡️ Bolt app is running!');
+  xmpp.start();
 
-  //await mainloop();
-  await startAndIgnore();
-  await saveAlertThreadData();
-
-  setTimeout(async () => {
-    await mainloop();
+  setInterval(async () => {
     await saveAlertThreadData();
   }, 5000);
-  
-  setInterval(async () => {
-    await mainloop();
-    await saveAlertThreadData();
-  }, 60000);
-
 })();
