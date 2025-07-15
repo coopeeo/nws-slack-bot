@@ -21,12 +21,11 @@ const xmpp = client({
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: process.env.SLACK_SOCKET_MODE, // Use Socket Mode if set to TRUE
-  appToken: process.env.SLACK_APP_TOKEN,
-  port: process.env.PORT || 3000,
+  logLevel: 'debug',
 });
 
 let alertThreadData = {};
+let alertNotificationData = {};
 const channel = process.env.SLACK_CHANNEL;
 
 debug(xmpp, false);
@@ -105,7 +104,18 @@ xmpp.on('stanza', async (stanza) => {
 
 
 
+// Commands
+
+app.command('/subscribe-nws', async ({ command, ack, respond }) => {
+  // Acknowledge command request
+  await ack();
+
+  await respond(`${command.text}`);
+});
+
+// Handle saving and loading of bot
 const alertThreadDataFile = 'alertThreadData.json';
+const alertNotificationDataFile = 'alertNotificationData.json';
 
 async function saveAlertThreadData() {
   logger.debug('Saving alertThreadData...');
@@ -113,11 +123,22 @@ async function saveAlertThreadData() {
   logger.debug('alertThreadData saved successfully.');
 }
 
+async function saveAlertNotificationData() {
+  logger.debug('Saving alert notification data...');
+  try {
+    await fs.writeFileSync(`data/${alertNotificationDataFile}`, JSON.stringify(alertNotificationData, null, 2));
+    logger.debug('Alert notification data saved successfully.');
+  } catch (error) {
+    logger.error('Error saving alert notification data:', error);
+  }
+}
+
 async function cleanup() {
   logger.debug('Cleaning up before exit...');
   await xmpp.stop();
   await xmpp.removeAllListeners();
   await saveAlertThreadData();
+  await saveAlertNotificationData();
   logger.info('Cleanup completed.');
 }
 
@@ -135,8 +156,15 @@ process.on("SIGINT", async () => {
     logger.warn('Failed to load alertThreadData.json, starting with empty data.');
     alertThreadData = {};
   }
+  logger.debug('Loading alertNotificationData...');
+  try {
+    alertNotificationData = await JSON.parse(fs.readFileSync(`data/${alertNotificationDataFile}`, 'utf8'));
+  } catch (error) {
+    logger.warn('Failed to load alertNotificationData.json, starting with empty data.');
+    alertNotificationData = {};
+  }
   // Start your app
-  await app.start();
+  await app.start(process.env.PORT || 3000);
 
   logger.info('⚡️ Bolt app is running!');
   xmpp.start();
