@@ -21,7 +21,7 @@ const xmpp = client({
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  logLevel: 'debug',
+  //logLevel: 'debug',
 });
 
 let alertThreadData = {};
@@ -56,6 +56,7 @@ xmpp.on('stanza', async (stanza) => {
     const parser = new XMLParser();
     
     let body = parser.parse(bodyXml);
+    logger.info(JSON.stringify(body.alert.info.area.geocode))
     
     if (body.alert.info.description == "Monitoring message only. Please disregard.") return;
 

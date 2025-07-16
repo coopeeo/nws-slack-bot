@@ -6,7 +6,8 @@
     "test": "nodemon app.js",
     "dev": "nodemon app.js",
     "start": "node app.js",
-    "run": "node app.js"
+    "run": "node app.js",
+    "getzones": "node getzones.js"
   },
   "repository": {
     "type": "git",
