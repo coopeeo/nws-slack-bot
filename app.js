@@ -195,7 +195,7 @@ async function submitHomeView(event, client, body = null) {
     await app.client.conversations.members({
       channel: channel,
     }).then((members) => {
-      const isMember =  true//members.members.includes(event.user);
+      const isMember =  !members.members.includes(event.user);
       if (isMember) {
         thestuff.view.blocks[thestuff.view.blocks.length - 1].elements.push({
             type: "button",
