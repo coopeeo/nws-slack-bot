@@ -113,6 +113,202 @@ app.command('/subscribe-nws', async ({ command, ack, respond }) => {
   await respond(`${command.text}`);
 });
 
+app.event('app_home_opened', async ({ event, client, logger }) => {
+  try {
+    // Call views.publish with the built-in client
+    const result = await client.views.publish({
+      // Use the user ID associated with the event
+      user_id: event.user,
+      view: {
+        // Home tabs must be enabled in your app configuration page under "App Home"
+        type: "home",
+        blocks: [
+          {
+            type: "header",
+            text: {
+              type: "plain_text",
+              text: "Here are your current subscribed zones",
+              emoji: true
+            }
+          },
+          {
+            type: "context",
+            elements: [
+              {
+                type: "image",
+                image_url: "https://api.slack.com/img/blocks/bkb_template_images/placeholder.png",
+                alt_text: "placeholder"
+              }
+            ]
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "*Your Configurations*"
+            }
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "*Waunakee, WI*\nZone: ######"
+            },
+            accessory: {
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: "Unsubscribe",
+                emoji: true
+              },
+              action_id: "unsub_btn",
+              value: "stuff here"
+            }
+          },
+          {
+            type: "actions",
+            elements: [
+              {
+                type: "button",
+                text: {
+                  type: "plain_text",
+                  text: "Remove All Subscriptions",
+                  emoji: true
+                },
+                style: "danger",
+                action_id: "unsub_all_btn"
+              }
+            ]
+          },
+          {
+            type: "divider"
+          },
+          {
+            type: "actions",
+            elements: [
+              {
+                type: "button",
+                text: {
+                  type: "plain_text",
+                  text: "Subscribe",
+                  emoji: true
+                },
+                style: "primary",
+                action_id: "subscribe_modal"
+              },
+              {
+                type: "button",
+                text: {
+                  type: "plain_text",
+                  text: "Help",
+                  emoji: true
+                },
+                action_id: "help"
+              },
+              {
+                type: "button",
+                text: {
+                  type: "plain_text",
+                  text: "Join the channel",
+                  emoji: true
+                },
+                action_id: "join_channel"
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    logger.info(result);
+  }
+  catch (error) {
+    logger.error(error);
+  }
+});
+app.action('unsub_btn', async ({ body, ack }) => {
+  // Acknowledge the action
+  await ack();
+  app.client.views.open({
+    user_id: body.user.id,
+    trigger_id: body.trigger_id,
+    view: {
+      callback_id: "unsub_modal",
+      title: {
+          type: "plain_text",
+          text: "Confirm Unsubscription?"
+        },
+      type: "modal",
+      blocks: [
+        {
+            type: "header",
+            text: {
+              type: "plain_text",
+              text: "Are you sure you want to unsubscribe from this zone?",
+              emoji: true
+            }
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "Waunakee, WI"
+            }
+          },
+        ],
+        submit: {
+          type: "plain_text",
+          text: "Confirm"
+        }
+      }
+    })
+});
+
+app.view('unsub_modal', async ({ ack, body, view, client }) => {
+  // Acknowledge the view submission
+  await ack();
+  // soon lmao
+});
+
+app.action('unsub_all_btn', async ({ body, ack }) => {
+  // Acknowledge the action
+  await ack();
+  app.client.views.open({
+    user_id: body.user.id,
+    trigger_id: body.trigger_id,
+    view: {
+      callback_id: "unsub_modal",
+      title: {
+          type: "plain_text",
+          text: "Confirm Unsubscription?"
+        },
+      type: "modal",
+      blocks: [
+        {
+            type: "header",
+            text: {
+              type: "plain_text",
+              text: "Are you sure you want to unsubscribe from this zone?",
+              emoji: true
+            }
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "Waunakee, WI"
+            }
+          },
+        ],
+        submit: {
+          type: "plain_text",
+          text: "Confirm"
+        }
+      }
+    })
+});
+
+
 // Handle saving and loading of bot
 const alertThreadDataFile = 'alertThreadData.json';
 const alertNotificationDataFile = 'alertNotificationData.json';
