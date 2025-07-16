@@ -105,10 +105,10 @@ xmpp.on('stanza', async (stanza) => {
 
 
 // events
-async function submitHomeView(event, client, body = null) {
+async function submitHomeView(event, client, body = {}) {
   const thestuff = {
       // Use the user ID associated with the event
-      user_id: event.user || body.user.id,
+      user_id: event ? event.user || body.user.id : body.user.id,
       view: {
         // Home tabs must be enabled in your app configuration page under "App Home"
         type: "home",
@@ -187,7 +187,7 @@ async function submitHomeView(event, client, body = null) {
     await app.client.conversations.members({
       channel: channel,
     }).then((members) => {
-      const isMember =  !members.members.includes(event.user);
+      const isMember =  !members.members.includes(event ? event.user || body.user.id : body.user.id);
       if (isMember) {
         thestuff.view.blocks[thestuff.view.blocks.length - 1].elements.push({
             type: "button",
@@ -296,10 +296,11 @@ app.view('unsub_all_modal', async ({ ack, body, view, client }) => {
   // Acknowledge the view submission
   await ack();
   // soon lmao
-  await submitHomeView(view.event, client);
+  logger.info('body', JSON.stringify(body));
+  await submitHomeView(view.event, client, body);
 });
 
-app.action('join_channel', async ({ body, ack }) => {
+app.action('join_channel', async ({ body, event, ack }) => {
   // Acknowledge the action
   await ack();
   try {
@@ -307,9 +308,36 @@ app.action('join_channel', async ({ body, ack }) => {
       channel: channel,
       users: body.user.id
     });
+    submitHomeView(event, app.client, body);
   } catch (error) {
     logger.error('Error inviting user to channel:', error);
   }
+});
+
+app.action('help', async ({ body, ack }) => {
+  // Acknowledge the action
+  await ack();
+  app.client.views.open({
+    user_id: body.user.id,
+    trigger_id: body.trigger_id,
+    view: {
+      callback_id: "help_modal",
+      title: {
+          type: "plain_text",
+          text: "Help"
+        },
+      type: "modal",
+      blocks: [
+        {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "This bot lets you subscribe to NWS alerts for your area.\nYou can also subscribe to multiple zones.\n\nTo subscribe to a zone please close this popup and click the green *Subscribe* button.",
+            }
+          },
+        ],
+      }
+    })
 });
 
 // Handle saving and loading of bot
