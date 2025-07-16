@@ -131,6 +131,42 @@ async function submitHomeView(event, client, body = {}) {
       }
     };
   });
+  const totalSubBlocks = ( subscribedZonesBlocks.length > 0 ? [
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Here are your current subscribed zones",
+        emoji: true
+      }
+    },
+    ...subscribedZonesBlocks,
+    {
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "Remove All Subscriptions",
+            emoji: true
+          },
+          style: "danger",
+          action_id: "unsub_all_btn",
+          value: "unsub_all_btn"
+        }
+      ]
+    },
+  ] : [
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "You are not subscribed to any zones, click the green \"Subscribe\" button to start",
+        emoji: true
+      }
+    },
+  ]);
   const thestuff = {
       // Use the user ID associated with the event
       user_id: event ? event.user || body.user.id : body.user.id,
@@ -138,31 +174,7 @@ async function submitHomeView(event, client, body = {}) {
         // Home tabs must be enabled in your app configuration page under "App Home"
         type: "home",
         blocks: [
-          {
-            type: "header",
-            text: {
-              type: "plain_text",
-              text: "Here are your current subscribed zones",
-              emoji: true
-            }
-          },
-          ...subscribedZonesBlocks,
-          {
-            type: "actions",
-            elements: [
-              {
-                type: "button",
-                text: {
-                  type: "plain_text",
-                  text: "Remove All Subscriptions",
-                  emoji: true
-                },
-                style: "danger",
-                action_id: "unsub_all_btn",
-                value: "unsub_all_btn"
-              }
-            ]
-          },
+          ...totalSubBlocks,
           {
             type: "divider"
           },
@@ -217,8 +229,6 @@ app.event('app_home_opened', async ({ event, client, logger }) => {
   try {
     // Call views.publish with the built-in client
     const result = await submitHomeView(event, client);
-
-    logger.info(result);
   }
   catch (error) {
     logger.error(error);
@@ -232,7 +242,7 @@ app.action('unsub_btn', async ({ body, ack }) => {
     user_id: body.user.id,
     trigger_id: body.trigger_id,
     view: {
-      callback_id: "unsub_modal",
+      callback_id: "unsub_modal_" + body.actions[0].value,
       title: {
           type: "plain_text",
           text: "Confirm Unsubscription?"
@@ -251,7 +261,7 @@ app.action('unsub_btn', async ({ body, ack }) => {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Waunakee, WI"
+              text: "body.actions[0]"
             }
           },
         ],
@@ -263,10 +273,12 @@ app.action('unsub_btn', async ({ body, ack }) => {
     })
 });
 
-app.view('unsub_modal', async ({ ack, body, view, client }) => {
+app.view(/unsub_modal_.+/, async ({ ack, body, view, client }) => {
   // Acknowledge the view submission
   await ack();
-  
+  const zoneId = view.callback_id.split('_')[2];
+  if (alertNotificationData[zoneId])
+    delete alertNotificationData[zoneId][alertNotificationData[zoneId].indexOf(body.user.id)];
   await submitHomeView(view.event, client, body);
 });
 
@@ -305,7 +317,11 @@ app.view('unsub_all_modal', async ({ ack, body, view, client }) => {
   // Acknowledge the view submission
   await ack();
   // soon lmao
-  logger.info('body', JSON.stringify(body));
+  for (const zoneId in alertNotificationData) {
+    if (alertNotificationData[zoneId] && alertNotificationData[zoneId].includes(body.user.id)) {
+      delete alertNotificationData[zoneId][alertNotificationData[zoneId].indexOf(body.user.id)];
+    }
+  }
   await submitHomeView(view.event, client, body);
 });
 
@@ -405,7 +421,6 @@ async function submitSubscribeModal(user_id, trigger_id, autofilloptions = "Auto
 
 async function updateSubscribeModal(body, autofilloptions = "Autofill options will show up here,\nbut you have to type it yourself.") {
   const newview = structuredClone(body.view);
-  console.log(JSON.stringify(newview));
   newview.blocks[1].elements[0].text = autofilloptions;
   delete newview.id;
   delete newview.team_id;
@@ -417,7 +432,6 @@ async function updateSubscribeModal(body, autofilloptions = "Autofill options wi
   delete newview.root_view_id;
   delete newview.app_installed_team_id;
   delete newview.bot_id
-  console.log(body.view.id)
   await app.client.views.update({
     user_id: body.user.id,
     view_id: body.view.id,
@@ -436,14 +450,12 @@ app.action('subscription_textbox_action', async ({ body, ack, client }) => {
   // Acknowledge the action
   await ack();
   const inputValue = body.actions[0].value.trim();
-  logger.debug('Input value:', inputValue);
   if (inputValue.length < 3) {
-    logger.warn('Input value is too short:', inputValue);
     await updateSubscribeModal(body, "Please enter at least 3 characters.");
   } else {
     const matchingZones = zoneNames.filter(zone => zone.toLowerCase().includes(inputValue.toLowerCase()));
     if (matchingZones.length > 0) {
-      const autofillOptions = "If your city is not listed choose the one closest to it or your county\n" + matchingZones.map(zone => `- ${zone}`).join('\n');
+      const autofillOptions = "If your city is not listed choose the one closest to it or your county\nIf there are multiple with the same name we recommend adding both\n" + matchingZones.map(zone => `- ${zone}`).join('\n');
       await updateSubscribeModal(body, autofillOptions);
     } else {
       await updateSubscribeModal(body, "No matching zones found.");
@@ -453,16 +465,14 @@ app.action('subscription_textbox_action', async ({ body, ack, client }) => {
 
 app.view('subscribe_modal', async ({ ack, body, view, client }) => {
   // Acknowledge the view submission
-  logger.info('body', JSON.stringify(body));
   const inputValue = body.view.state.values[view.blocks[0].block_id].subscription_textbox_action.value.trim();
-  logger.debug('Input value:', inputValue);
   var zoneId = zonelistReverse[inputValue.toLowerCase()];
 
   if (zoneId) {
     ack();
     alertNotificationData[zoneId] = alertNotificationData[zoneId] ? alertNotificationData[zoneId] : [];
     alertNotificationData[zoneId].push(body.user.id);
-    logger.info(`User ${body.user.id} subscribed to zone ${zoneId} (${inputValue})`);
+    await submitHomeView(view.event, client, body);
   } else {
     await ack({ response_action: 'errors', errors: { [view.blocks[0].block_id]: 'Invalid subscription area.' } });
   }
