@@ -1,6 +1,5 @@
 const fs = require('fs');
 let finalData = {};
-let slackOptions = {options:[]};
 
 fetch("https://api.weather.gov/zones")
   .then(response => response.json())

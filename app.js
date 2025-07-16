@@ -26,6 +26,8 @@ const app = new App({
 
 let alertThreadData = {};
 let alertNotificationData = {};
+let zonelist = {};
+let zoneNames = [];
 const channel = process.env.SLACK_CHANNEL;
 
 debug(xmpp, false);
@@ -56,7 +58,7 @@ xmpp.on('stanza', async (stanza) => {
     const parser = new XMLParser();
     
     let body = parser.parse(bodyXml);
-    logger.info(JSON.stringify(body.alert.info.area.geocode))
+    //logger.info(JSON.stringify(body.alert.info.area.geocode))
     
     if (body.alert.info.description == "Monitoring message only. Please disregard.") return;
 
@@ -169,7 +171,7 @@ async function submitHomeView(event, client, body = {}) {
                   emoji: true
                 },
                 style: "primary",
-                action_id: "subscribe_modal"
+                action_id: "subscribe_btn"
               },
               {
                 type: "button",
@@ -341,6 +343,100 @@ app.action('help', async ({ body, ack }) => {
     })
 });
 
+async function submitSubscribeModal(user_id, trigger_id, autofilloptions = "Autofill options will show up here,\nbut you have to type it yourself.") {
+  await app.client.views.open({
+    user_id: user_id,
+    trigger_id: trigger_id,
+    view: {
+      callback_id: "subscribe_modal",
+      title: {
+        type: "plain_text",
+        text: "Subscribe"
+      },
+      submit: {
+        type: "plain_text",
+        text: "Subscribe"
+      },
+      clear_on_close: true,
+      close: {
+        type: "plain_text",
+        text: "Cancel"
+      },
+      type: "modal",
+      blocks: [
+        {
+          dispatch_action: true,
+          type: "input",
+          element: {
+            type: "plain_text_input",
+            dispatch_action_config: {
+              trigger_actions_on: [
+                "on_character_entered"
+              ]
+            },
+            action_id: "subscription_textbox_action"
+          },
+          label: {
+            type: "plain_text",
+            text: "Type the area you want to subscribe to. Example: \"Austin, TX\"",
+            emoji: true
+          }
+        },
+        {
+          type: "context",
+          elements: [
+            {
+              type: "plain_text",
+              text: autofilloptions,
+              emoji: true
+            }
+          ]
+        }
+      ],
+    }
+  })
+}
+
+async function updateSubscribeModal(body, autofilloptions = "Autofill options will show up here,\nbut you have to type it yourself.") {
+  const newview = structuredClone(body.view);
+  console.log(JSON.stringify(newview));
+  newview.blocks[1].elements[0].text = autofilloptions;
+  delete newview.id;
+  delete newview.team_id;
+  delete newview.private_metadata;
+  delete newview.state;
+  delete newview.hash;
+  delete newview.app_id;
+  delete newview.previous_view_id;
+  delete newview.root_view_id;
+  delete newview.app_installed_team_id;
+  delete newview.bot_id
+  console.log(body.view.id)
+  await app.client.views.update({
+    user_id: body.user.id,
+    view_id: body.view.id,
+    hash: body.view.hash,
+    view: newview
+  });
+}
+
+app.action('subscribe_btn', async ({ body, ack }) => {
+  // Acknowledge the action
+  await ack();
+  submitSubscribeModal(body.user.id, body.trigger_id);
+});
+
+app.action('subscription_textbox_action', async ({ body, ack, client }) => {
+  // Acknowledge the action
+  await ack();
+  const inputValue = body.actions[0].value.trim();
+  logger.debug('Input value:', inputValue);
+  if (inputValue.length < 3) {
+    logger.warn('Input value is too short:', inputValue);
+    await updateSubscribeModal(body, "Please enter at least 3 characters.");
+  }
+});
+
 // Handle saving and loading of bot
 const alertThreadDataFile = 'alertThreadData.json';
 const alertNotificationDataFile = 'alertNotificationData.json';
@@ -390,6 +486,13 @@ process.on("SIGINT", async () => {
   } catch (error) {
     logger.warn('Failed to load alertNotificationData.json, starting with empty data.');
     alertNotificationData = {};
+  }
+  logger.debug('Loading Zone data...');
+  try {
+    zonelist = await JSON.parse(fs.readFileSync(`data/zones.json`, 'utf8'));
+    zoneNames = Object.values(zonelist);
+  } catch (error) {
+    logger.fatal('Please run `npm run getzones` to generate the zones.json file. Error:', error);
   }
   // Start your app
   await app.start(process.env.PORT || 3000);
