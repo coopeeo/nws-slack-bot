@@ -28,6 +28,7 @@ let alertThreadData = {};
 let alertNotificationData = {};
 let zonelist = {};
 let zoneNames = [];
+let zonelistReverse = {};
 const channel = process.env.SLACK_CHANNEL;
 
 debug(xmpp, false);
@@ -445,6 +446,23 @@ app.action('subscription_textbox_action', async ({ body, ack, client }) => {
   }
 });
 
+app.view('subscribe_modal', async ({ ack, body, view, client }) => {
+  // Acknowledge the view submission
+  logger.info('body', JSON.stringify(body));
+  const inputValue = body.view.state.values[view.blocks[0].block_id].subscription_textbox_action.value.trim();
+  logger.debug('Input value:', inputValue);
+  var zoneId = zonelistReverse[inputValue.toLowerCase()];
+
+  if (zoneId) {
+    ack();
+    alertNotificationData[zoneId] = alertNotificationData[zoneId] ? alertNotificationData[zoneId] : [];
+    alertNotificationData[zoneId].push(body.user.id);
+    logger.info(`User ${body.user.id} subscribed to zone ${zoneId} (${inputValue})`);
+  } else {
+    await ack({ response_action: 'errors', errors: { [view.blocks[0].block_id]: 'Invalid subscription area.' } });
+  }
+});
+
 // Handle saving and loading of bot
 const alertThreadDataFile = 'alertThreadData.json';
 const alertNotificationDataFile = 'alertNotificationData.json';
@@ -499,6 +517,7 @@ process.on("SIGINT", async () => {
   try {
     zonelist = await JSON.parse(fs.readFileSync(`data/zones.json`, 'utf8'));
     zoneNames = Object.values(zonelist);
+    zonelistReverse = Object.fromEntries(Object.entries(zonelist).map(([key, value]) => [value.trim().toLowerCase(), key]));
   } catch (error) {
     logger.fatal('Please run `npm run getzones` to generate the zones.json file. Error:', error);
   }
