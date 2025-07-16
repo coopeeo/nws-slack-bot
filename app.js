@@ -113,12 +113,10 @@ app.command('/subscribe-nws', async ({ command, ack, respond }) => {
   await respond(`${command.text}`);
 });
 
-app.event('app_home_opened', async ({ event, client, logger }) => {
-  try {
-    // Call views.publish with the built-in client
-    const result = await client.views.publish({
+async function submitHomeView(event, client, body = null) {
+  const thestuff = {
       // Use the user ID associated with the event
-      user_id: event.user,
+      user_id: event.user || body.user.id,
       view: {
         // Home tabs must be enabled in your app configuration page under "App Home"
         type: "home",
@@ -129,23 +127,6 @@ app.event('app_home_opened', async ({ event, client, logger }) => {
               type: "plain_text",
               text: "Here are your current subscribed zones",
               emoji: true
-            }
-          },
-          {
-            type: "context",
-            elements: [
-              {
-                type: "image",
-                image_url: "https://api.slack.com/img/blocks/bkb_template_images/placeholder.png",
-                alt_text: "placeholder"
-              }
-            ]
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Your Configurations*"
             }
           },
           {
@@ -176,7 +157,8 @@ app.event('app_home_opened', async ({ event, client, logger }) => {
                   emoji: true
                 },
                 style: "danger",
-                action_id: "unsub_all_btn"
+                action_id: "unsub_all_btn",
+                value: "unsub_all_btn"
               }
             ]
           },
@@ -205,20 +187,35 @@ app.event('app_home_opened', async ({ event, client, logger }) => {
                 },
                 action_id: "help"
               },
-              {
-                type: "button",
-                text: {
-                  type: "plain_text",
-                  text: "Join the channel",
-                  emoji: true
-                },
-                action_id: "join_channel"
-              }
             ]
           }
         ]
       }
+    };
+    await app.client.conversations.members({
+      channel: channel,
+    }).then((members) => {
+      const isMember =  true//members.members.includes(event.user);
+      if (isMember) {
+        thestuff.view.blocks[thestuff.view.blocks.length - 1].elements.push({
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "Join the Channel",
+              emoji: true
+            },
+            action_id: "join_channel"
+        });
+      }
     });
+    return await client.views.publish(thestuff);
+}
+
+
+app.event('app_home_opened', async ({ event, client, logger }) => {
+  try {
+    // Call views.publish with the built-in client
+    const result = await submitHomeView(event, client);
 
     logger.info(result);
   }
@@ -226,6 +223,7 @@ app.event('app_home_opened', async ({ event, client, logger }) => {
     logger.error(error);
   }
 });
+
 app.action('unsub_btn', async ({ body, ack }) => {
   // Acknowledge the action
   await ack();
@@ -268,6 +266,7 @@ app.view('unsub_modal', async ({ ack, body, view, client }) => {
   // Acknowledge the view submission
   await ack();
   // soon lmao
+  await submitHomeView(view.event, client, body);
 });
 
 app.action('unsub_all_btn', async ({ body, ack }) => {
@@ -277,7 +276,7 @@ app.action('unsub_all_btn', async ({ body, ack }) => {
     user_id: body.user.id,
     trigger_id: body.trigger_id,
     view: {
-      callback_id: "unsub_modal",
+      callback_id: "unsub_all_modal",
       title: {
           type: "plain_text",
           text: "Confirm Unsubscription?"
@@ -288,15 +287,8 @@ app.action('unsub_all_btn', async ({ body, ack }) => {
             type: "header",
             text: {
               type: "plain_text",
-              text: "Are you sure you want to unsubscribe from this zone?",
+              text: "Are you sure you want to unsubscribe from all zones?",
               emoji: true
-            }
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "Waunakee, WI"
             }
           },
         ],
@@ -308,6 +300,25 @@ app.action('unsub_all_btn', async ({ body, ack }) => {
     })
 });
 
+app.view('unsub_all_modal', async ({ ack, body, view, client }) => {
+  // Acknowledge the view submission
+  await ack();
+  // soon lmao
+  await submitHomeView(view.event, client);
+});
+
+app.action('join_channel', async ({ body, ack }) => {
+  // Acknowledge the action
+  await ack();
+  try {
+    await app.client.conversations.invite({
+      channel: channel,
+      users: body.user.id
+    });
+  } catch (error) {
+    logger.error('Error inviting user to channel:', error);
+  }
+});
 
 // Handle saving and loading of bot
 const alertThreadDataFile = 'alertThreadData.json';
