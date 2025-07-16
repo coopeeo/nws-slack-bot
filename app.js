@@ -110,6 +110,27 @@ xmpp.on('stanza', async (stanza) => {
 
 // events
 async function submitHomeView(event, client, body = {}) {
+  const subscriptions = Object.keys(alertNotificationData).filter((zoneId) => alertNotificationData[zoneId] && alertNotificationData[zoneId].includes(event ? event.user || body.user.id : body.user.id));
+  const subscribedZonesBlocks = subscriptions.map((zoneId) => {
+    const zoneName = zonelist[zoneId] || "Unknown Zone";
+    return {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*${zoneName}*\nZone: ${zoneId}`
+      },
+      accessory: {
+        type: "button",
+        text: {
+          type: "plain_text",
+          text: "Unsubscribe",
+          emoji: true
+        },
+        action_id: "unsub_btn",
+        value: zoneId
+      }
+    };
+  });
   const thestuff = {
       // Use the user ID associated with the event
       user_id: event ? event.user || body.user.id : body.user.id,
@@ -125,23 +146,7 @@ async function submitHomeView(event, client, body = {}) {
               emoji: true
             }
           },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Waunakee, WI*\nZone: ######"
-            },
-            accessory: {
-              type: "button",
-              text: {
-                type: "plain_text",
-                text: "Unsubscribe",
-                emoji: true
-              },
-              action_id: "unsub_btn",
-              value: "stuff here"
-            }
-          },
+          ...subscribedZonesBlocks,
           {
             type: "actions",
             elements: [
@@ -261,7 +266,7 @@ app.action('unsub_btn', async ({ body, ack }) => {
 app.view('unsub_modal', async ({ ack, body, view, client }) => {
   // Acknowledge the view submission
   await ack();
-  // soon lmao
+  
   await submitHomeView(view.event, client, body);
 });
 
