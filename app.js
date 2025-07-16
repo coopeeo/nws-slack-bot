@@ -104,15 +104,7 @@ xmpp.on('stanza', async (stanza) => {
 
 
 
-// Commands
-
-app.command('/subscribe-nws', async ({ command, ack, respond }) => {
-  // Acknowledge command request
-  await ack();
-
-  await respond(`${command.text}`);
-});
-
+// events
 async function submitHomeView(event, client, body = null) {
   const thestuff = {
       // Use the user ID associated with the event
