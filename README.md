@@ -5,6 +5,7 @@ The data is recived from and XMPP chatroom from the National Weather Service, yo
 Directions:
 1. fill the creds in .env (there is an example)
 2. run `npm i`
+3. run `npm run getzones` (this is to download zones)
 3. run `npm run start`
 
 TODO:

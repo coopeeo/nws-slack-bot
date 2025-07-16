@@ -434,6 +434,14 @@ app.action('subscription_textbox_action', async ({ body, ack, client }) => {
   if (inputValue.length < 3) {
     logger.warn('Input value is too short:', inputValue);
     await updateSubscribeModal(body, "Please enter at least 3 characters.");
+  } else {
+    const matchingZones = zoneNames.filter(zone => zone.toLowerCase().includes(inputValue.toLowerCase()));
+    if (matchingZones.length > 0) {
+      const autofillOptions = matchingZones.map(zone => `- ${zone}`).join('\n');
+      await updateSubscribeModal(body, autofillOptions);
+    } else {
+      await updateSubscribeModal(body, "No matching zones found.");
+    }
   }
 });
 

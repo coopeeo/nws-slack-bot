@@ -5,7 +5,7 @@ fetch("https://api.weather.gov/zones")
   .then(response => response.json())
   .then(data => {
     data.features.forEach(feature => {
-      finalData[feature.properties.id] = feature.properties.name + ", " + feature.properties.state;
+      finalData[feature.properties.id] = (feature.properties.state ? feature.properties.name.trim().replace(/\s+/g, ' ') + ", " + feature.properties.state : feature.properties.name.trim().replace(/\s+/g, ' '));
     });
     fs.writeFileSync('data/zones.json', JSON.stringify(finalData));
 
