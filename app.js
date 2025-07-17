@@ -471,7 +471,7 @@ app.action('subscription_textbox_action', async ({ body, ack, client }) => {
       const autofillOptions = "If your city is not listed choose the one closest to it or your county\nIf there are multiple with the same name we recommend adding both\n" + matchingZones.map(zone => `- ${zone}`).join('\n');
       await updateSubscribeModal(body, autofillOptions);
     } else {
-      await updateSubscribeModal(body, "No matching zones found.");
+      await updateSubscribeModal(body, "No matching zones found.\nIf your city is not listed choose the one closest to it or your county\nIf there are multiple with the same name we recommend adding both\n");
     }
   }
 });
