@@ -12,7 +12,7 @@ fetch("https://api.weather.gov/zones")
             finalData[feature.properties.id] = zonename;
             checks.push(feature.properties.id);
             checks2.push(zonename.toLowerCase());
-        } else if (checks2.includes(zonename.toLowerCase())) {
+        } else if (checks2.includes(zonename.toLowerCase()) || !checks.includes(feature.properties.id)) {
             console.warn(`Duplicate zone found: ${zonename} (${feature.properties.id})`);
             i = 2;
             while (checks2.includes(zonename.toLowerCase() + ` (${i})`)) {
