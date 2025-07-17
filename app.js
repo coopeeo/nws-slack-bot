@@ -59,9 +59,10 @@ xmpp.on('stanza', async (stanza) => {
     const parser = new XMLParser();
     
     let body = parser.parse(bodyXml);
-    //logger.info(JSON.stringify(body.alert.info.area.geocode))
-    
+    //logger.info(JSON.stringify(body.alert.info.area.geocode));
+
     if (body.alert.info.description == "Monitoring message only. Please disregard.") return;
+    if (body.alert.info.area == undefined) return;
 
     if (body.alert.references && body.alert.references.split(',').length == 0) app.logger.info(`Alert ${body.alert.identifier} has a reference but cant find id. References: ${body.alert.references}`);
 
@@ -69,6 +70,12 @@ xmpp.on('stanza', async (stanza) => {
       await app.client.chat.postMessage({
         channel,
         text: `ALERT UPDATE: ${body.alert.info.headline}\n\nDESCRIPTION: ${body.alert.info.description}\n\nINSTRUCTION: ${body.alert.info.instruction}`,
+        username: 'NWS Alert Bot',
+        thread_ts: alertThreadData[body.alert.references.split(',')[1]],
+      });
+      await app.client.chat.postMessage({
+        channel,
+        text: `Mentions: ${body.alert.info.area.geocode ? body.alert.info.area.geocode.filter(({valueName, value}) => valueName == 'UGC').map((a) => alertNotificationData[a.value] ? alertNotificationData[a.value].map((user) => `<@${user}>`).join(', ') : '').join('\n') : 'No mentions to give out'}`,
         username: 'NWS Alert Bot',
         thread_ts: alertThreadData[body.alert.references.split(',')[1]],
       });
@@ -100,6 +107,12 @@ xmpp.on('stanza', async (stanza) => {
         username: 'NWS Alert Bot',
       }).catch((error) => {
         logger.error('Error posting message to Slack:', error);
+      });
+      await app.client.chat.postMessage({
+        channel,
+        text: `Mentions: ${body.alert.info.area.geocode ? body.alert.info.area.geocode.filter(({valueName, value}) => valueName == 'UGC').map((a) => alertNotificationData[a.value] ? alertNotificationData[a.value].map((user) => `<@${user}>`).join(', ') : '').join('\n') : 'No mentions to give out'}`,
+        username: 'NWS Alert Bot',
+        thread_ts: msg.ts,
       });
     }
     logger.debug(`[ALERT INFO]`, body.alert.info);
