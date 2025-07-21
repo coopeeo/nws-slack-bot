@@ -7,7 +7,6 @@ const fs = require('fs');
 const logger = require('./lib/logger')
 const debug = require('./lib/xmpp.debug'); // For logging XMPP traffic
 
-
 require('dotenv').config();
 
 const xmpp = client({
@@ -17,6 +16,8 @@ const xmpp = client({
   username: process.env.XMPP_USERNAME,
   password: process.env.XMPP_PASSWORD,
 });
+
+const wsc = process.env.MODE === "ws" ? new WebSocket(process.env.WS_URL) : null;
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,

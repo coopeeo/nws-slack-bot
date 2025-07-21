@@ -11,3 +11,4 @@ Directions:
 TODO:
 - [ ] Add docker container support
 - [ ] Add deleting thread data that got canceled (probably not if they finished and not canceled because I don't feel like setting 1000 timeouts)
+- [ ] Refactor so its actually readable
