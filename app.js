@@ -6,6 +6,7 @@ const fs = require('fs');
 
 const logger = require('./lib/logger')
 const debug = require('./lib/xmpp.debug'); // For logging XMPP traffic
+const makeZones = require('./lib/getzones'); // For generating zones.json
 
 require('dotenv').config();
 
@@ -17,7 +18,7 @@ const xmpp = client({
   password: process.env.XMPP_PASSWORD,
 });
 
-const wsc = process.env.MODE === "ws" ? new WebSocket(process.env.WS_URL) : null;
+const wsc = process.env.MODE.toLowerCase() == "ws" ? new WebSocket(process.env.WS_URL) : null;
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -32,6 +33,85 @@ let zoneNames = [];
 let zonelistReverse = {};
 const channel = process.env.SLACK_CHANNEL;
 
+// Message handler
+async function handleMessage(body) {
+  if (body.alert.info.description == "Monitoring message only. Please disregard.") return;
+  if (body.alert.info.area == undefined) return;
+
+  if (body.alert.references && body.alert.references.split(',').length == 0) app.logger.info(`Alert ${body.alert.identifier} has a reference but cant find id. References: ${body.alert.references}`);
+
+  if (body.alert.references && body.alert.references != null && alertThreadData[body.alert.references.split(',')[1]] != undefined && alertThreadData[body.alert.references.split(',')[1]] != null && alertThreadData[body.alert.references.split(',')[1]] != 'ignore') {
+    await app.client.chat.postMessage({
+      channel,
+      text: `ALERT UPDATE: ${body.alert.info.headline}\n\nDESCRIPTION: ${body.alert.info.description}\n\nINSTRUCTION: ${body.alert.info.instruction}`,
+      username: 'NWS Alert Bot',
+      thread_ts: alertThreadData[body.alert.references.split(',')[1]],
+    });
+    await app.client.chat.postMessage({
+      channel,
+      text: `Mentions: ${body.alert.info.area.geocode ? body.alert.info.area.geocode.filter(({valueName, value}) => valueName == 'UGC').map((a) => alertNotificationData[a.value] ? alertNotificationData[a.value].map((user) => `<@${user}>`).join(', ') : '').join('\n') : 'No mentions to give out'}`,
+      username: 'NWS Alert Bot',
+      thread_ts: alertThreadData[body.alert.references.split(',')[1]],
+    });
+    
+    alertThreadData[body.alert.identifier] = alertThreadData[body.alert.references.split(',')[1]];
+  
+  } else {
+    msg = await app.client.chat.postMessage({
+      channel,
+      text: `ALERT: ${body.alert.info.headline}`,
+      username: 'NWS Alert Bot',
+    }).catch((error) => {
+      logger.error('Error posting message to Slack:', error);
+    });
+
+    alertThreadData[body.alert.identifier] = msg.ts;
+    
+    if (body.alert.references && body.alert.references != null) {
+      body.alert.references.split(',').filter((ref) => (ref.startsWith('urn:oid:'))).forEach((ref) => {
+        alertThreadData[ref] = msg.ts;
+        logger.info(`Added reference ${ref} to alertThreadData with ts ${msg.ts}`);
+      });
+    }
+    
+    await app.client.chat.postMessage({
+      channel,
+      text: `DESCRIPTION: ${body.alert.info.description}\n\nINSTRUCTION: ${body.alert.info.instruction}`,
+      thread_ts: msg.ts,
+      username: 'NWS Alert Bot',
+    }).catch((error) => {
+      logger.error('Error posting message to Slack:', error);
+    });
+    await app.client.chat.postMessage({
+      channel,
+      text: `Mentions: ${body.alert.info.area.geocode ? body.alert.info.area.geocode.filter(({valueName, value}) => valueName == 'UGC').map((a) => alertNotificationData[a.value] ? alertNotificationData[a.value].map((user) => `<@${user}>`).join(', ') : '').join('\n') : 'No mentions to give out'}`,
+      username: 'NWS Alert Bot',
+      thread_ts: msg.ts,
+    });
+  }
+  logger.debug(`[ALERT INFO]`, body.alert.info);
+}
+
+// WebSocket Stuff
+if (wsc != null) {
+  logger.info('Connecting to WebSocket...');
+  wsc.onopen = () => {
+    logger.info('WebSocket connection established');
+  };
+  wsc.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    handleMessage(data);
+  };
+  wsc.onerror = (error) => {
+    logger.throw('WebSocket error:', error);
+  };
+  wsc.onclose = () => {
+    logger.throw('WebSocket connection closed');
+  }
+}
+
+// XMPP Stuff
 debug(xmpp, false);
 
 xmpp.on('error', (err) => {
@@ -60,63 +140,8 @@ xmpp.on('stanza', async (stanza) => {
     const parser = new XMLParser();
     
     let body = parser.parse(bodyXml);
-    //logger.info(JSON.stringify(body.alert.info.area.geocode));
 
-    if (body.alert.info.description == "Monitoring message only. Please disregard.") return;
-    if (body.alert.info.area == undefined) return;
-
-    if (body.alert.references && body.alert.references.split(',').length == 0) app.logger.info(`Alert ${body.alert.identifier} has a reference but cant find id. References: ${body.alert.references}`);
-
-    if (body.alert.references && body.alert.references != null && alertThreadData[body.alert.references.split(',')[1]] != undefined && alertThreadData[body.alert.references.split(',')[1]] != null && alertThreadData[body.alert.references.split(',')[1]] != 'ignore') {
-      await app.client.chat.postMessage({
-        channel,
-        text: `ALERT UPDATE: ${body.alert.info.headline}\n\nDESCRIPTION: ${body.alert.info.description}\n\nINSTRUCTION: ${body.alert.info.instruction}`,
-        username: 'NWS Alert Bot',
-        thread_ts: alertThreadData[body.alert.references.split(',')[1]],
-      });
-      await app.client.chat.postMessage({
-        channel,
-        text: `Mentions: ${body.alert.info.area.geocode ? body.alert.info.area.geocode.filter(({valueName, value}) => valueName == 'UGC').map((a) => alertNotificationData[a.value] ? alertNotificationData[a.value].map((user) => `<@${user}>`).join(', ') : '').join('\n') : 'No mentions to give out'}`,
-        username: 'NWS Alert Bot',
-        thread_ts: alertThreadData[body.alert.references.split(',')[1]],
-      });
-      
-      alertThreadData[body.alert.identifier] = alertThreadData[body.alert.references.split(',')[1]];
-    
-    } else {
-      msg = await app.client.chat.postMessage({
-        channel,
-        text: `ALERT: ${body.alert.info.headline}`,
-        username: 'NWS Alert Bot',
-      }).catch((error) => {
-        logger.error('Error posting message to Slack:', error);
-      });
-
-      alertThreadData[body.alert.identifier] = msg.ts;
-      
-      if (body.alert.references && body.alert.references != null) {
-        body.alert.references.split(',').filter((ref) => (ref.startsWith('urn:oid:'))).forEach((ref) => {
-          alertThreadData[ref] = msg.ts;
-          logger.info(`Added reference ${ref} to alertThreadData with ts ${msg.ts}`);
-        });
-      }
-      
-      await app.client.chat.postMessage({
-        channel,
-        text: `DESCRIPTION: ${body.alert.info.description}\n\nINSTRUCTION: ${body.alert.info.instruction}`,
-        thread_ts: msg.ts,
-        username: 'NWS Alert Bot',
-      }).catch((error) => {
-        logger.error('Error posting message to Slack:', error);
-      });
-      await app.client.chat.postMessage({
-        channel,
-        text: `Mentions: ${body.alert.info.area.geocode ? body.alert.info.area.geocode.filter(({valueName, value}) => valueName == 'UGC').map((a) => alertNotificationData[a.value] ? alertNotificationData[a.value].map((user) => `<@${user}>`).join(', ') : '').join('\n') : 'No mentions to give out'}`,
-        username: 'NWS Alert Bot',
-        thread_ts: msg.ts,
-      });
-    }
-    logger.debug(`[ALERT INFO]`, body.alert.info);
+    handleMessage(body);
   }
 });
 
@@ -530,31 +555,47 @@ process.on("SIGINT", async () => {
 (async () => {
   logger.debug('Loading alertThreadData...');
   try {
-    alertThreadData = await JSON.parse(fs.readFileSync(`data/${alertThreadDataFile}`, 'utf8'));
+    if (!fs.existsSync(__dirname + '/data')) {
+      fs.mkdirSync(__dirname + '/data');
+    }
+  } catch (error) {
+    logger.error('Error creating data directory:', error);
+  }
+  try {
+    alertThreadData = await JSON.parse(fs.readFileSync(__dirname + `/data/${alertThreadDataFile}`, 'utf8'));
   } catch (error) {
     logger.warn('Failed to load alertThreadData.json, starting with empty data.');
     alertThreadData = {};
   }
   logger.debug('Loading alertNotificationData...');
   try {
-    alertNotificationData = await JSON.parse(fs.readFileSync(`data/${alertNotificationDataFile}`, 'utf8'));
+    alertNotificationData = await JSON.parse(fs.readFileSync(__dirname + `/data/${alertNotificationDataFile}`, 'utf8'));
   } catch (error) {
     logger.warn('Failed to load alertNotificationData.json, starting with empty data.');
     alertNotificationData = {};
   }
+  try {
+    if (!fs.existsSync(__dirname + '/data/zones.json')) {
+      logger.warn('zones.json not found, generating zones...');
+      await makeZones();
+    }
+  } catch (error) {
+    logger.error('Error generating zones.json:', error);
+  }
   logger.debug('Loading Zone data...');
   try {
-    zonelist = await JSON.parse(fs.readFileSync(`data/zones.json`, 'utf8'));
+    zonelist = await JSON.parse(fs.readFileSync(__dirname + `/data/zones.json`, 'utf8'));
     zoneNames = Object.values(zonelist);
     zonelistReverse = Object.fromEntries(Object.entries(zonelist).map(([key, value]) => [value.trim().toLowerCase(), key]));
   } catch (error) {
-    logger.fatal('Please run `npm run getzones` to generate the zones.json file. Error:', error);
+    logger.fatal('Getting Zones failed', error);
   }
   // Start your app
   await app.start(process.env.PORT || 3000);
 
   logger.info('⚡️ Bolt app is running!');
-  xmpp.start();
+  
+  if (wsc == null) xmpp.start();
 
   setInterval(async () => {
     await saveAlertThreadData();
