@@ -38,7 +38,7 @@ async function handleMessage(body) {
   if (body.alert.info.description == "Monitoring message only. Please disregard.") return;
   if (body.alert.info.area == undefined) return;
 
-  if (body.alert.references && body.alert.references.split(',').length == 0) app.logger.info(`Alert ${body.alert.identifier} has a reference but cant find id. References: ${body.alert.references}`);
+  if (body.alert.references && body.alert.references.split(',').length == 0) logger.info(`Alert ${body.alert.identifier} has a reference but cant find id. References: ${body.alert.references}`);
 
   if (body.alert.references && body.alert.references != null && alertThreadData[body.alert.references.split(',')[1]] != undefined && alertThreadData[body.alert.references.split(',')[1]] != null && alertThreadData[body.alert.references.split(',')[1]] != 'ignore') {
     await app.client.chat.postMessage({
@@ -104,7 +104,7 @@ if (wsc != null) {
     handleMessage(data);
   };
   wsc.onerror = (error) => {
-    logger.throw('WebSocket error:', error);
+    logger.throw('WebSocket error:', JSON.stringify(error));
   };
   wsc.onclose = () => {
     logger.throw('WebSocket connection closed');
