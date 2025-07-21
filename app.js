@@ -18,7 +18,7 @@ const xmpp = client({
   password: process.env.XMPP_PASSWORD,
 });
 
-const wsc = process.env.MODE.toLowerCase() == "ws" ? new WebSocket(process.env.WS_URL) : null;
+const wsc = process.env.MODE && process.env.MODE.toLowerCase() == "ws" ? new WebSocket(process.env.WS_URL) : null;
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
