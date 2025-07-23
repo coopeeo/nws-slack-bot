@@ -541,10 +541,8 @@ async function cleanup() {
   logger.debug('Cleaning up before exit...');
   await xmpp.stop();
   await xmpp.removeAllListeners();
-  if (wsc) {
+  if (wsc)
     wsc.close();
-    wsc.removeAllListeners();
-  }
   await saveAlertThreadData();
   await saveAlertNotificationData();
   logger.info('Cleanup completed.');
