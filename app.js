@@ -523,14 +523,14 @@ const alertNotificationDataFile = 'alertNotificationData.json';
 
 async function saveAlertThreadData() {
   logger.debug('Saving alertThreadData...');
-  await fs.writeFileSync(`data/${alertThreadDataFile}`, JSON.stringify(alertThreadData, null, 2));
+  await fs.writeFileSync(__dirname + `/data/${alertThreadDataFile}`, JSON.stringify(alertThreadData, null, 2));
   logger.debug('alertThreadData saved successfully.');
 }
 
 async function saveAlertNotificationData() {
   logger.debug('Saving alert notification data...');
   try {
-    await fs.writeFileSync(`data/${alertNotificationDataFile}`, JSON.stringify(alertNotificationData, null, 2));
+    await fs.writeFileSync(__dirname + `/data/${alertNotificationDataFile}`, JSON.stringify(alertNotificationData, null, 2));
     logger.debug('Alert notification data saved successfully.');
   } catch (error) {
     logger.error('Error saving alert notification data:', error);
@@ -541,6 +541,10 @@ async function cleanup() {
   logger.debug('Cleaning up before exit...');
   await xmpp.stop();
   await xmpp.removeAllListeners();
+  if (wsc) {
+    wsc.close();
+    wsc.removeAllListeners();
+  }
   await saveAlertThreadData();
   await saveAlertNotificationData();
   logger.info('Cleanup completed.');
@@ -599,5 +603,6 @@ process.on("SIGINT", async () => {
 
   setInterval(async () => {
     await saveAlertThreadData();
+    await saveAlertNotificationData();
   }, 5000);
 })();
