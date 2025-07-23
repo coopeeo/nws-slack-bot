@@ -551,7 +551,13 @@ async function cleanup() {
 }
 
 process.on("SIGINT", async () => {
-  logger.debug('SIGINT received, cleaning up...');
+  logger.warn('SIGINT received, cleaning up...');
+  await cleanup();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  logger.warn('SIGTERM received, cleaning up...');
   await cleanup();
   process.exit(0);
 });
